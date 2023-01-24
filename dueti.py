@@ -1,4 +1,4 @@
-import os, argparse
+import os
 
 def writembr(drive,boot0):
     drive=os.open(drive, os.O_RDWR | os.O_BINARY)
@@ -28,50 +28,53 @@ def writepbr(part,boot1):
     os.close(boot1)
     os.close(part)
 
-parser=argparse.ArgumentParser(
-    prog='dueti',
-    description='DUET Installer'
-)
-subparsers=parser.add_subparsers(required=True)
+if __name__ == '__main__':
+    import argparse
+        
+    parser=argparse.ArgumentParser(
+        prog='dueti',
+        description='DUET Installer'
+    )
+    subparsers=parser.add_subparsers(required=True)
 
-mbr=subparsers.add_parser(
-    'mbr',
-    description='Install MBR chainloader',
-    epilog='Examples of drive paths:\
-        Windows: //./PhysicalDrive0\
-        Linux: /dev/sda\
-        Darwin: /dev/rdisk0'
-)
-mbr.add_argument(
-    'boot0',
-    help='path to a DUET boot0 file, containing the MBR chainloader'
-)
-mbr.add_argument(
-    'drive',
-    help='path to destination device'
-)
+    mbr=subparsers.add_parser(
+        'mbr',
+        description='Install MBR chainloader',
+        epilog='Examples of drive paths:\
+            Windows: //./PhysicalDrive0\
+            Linux: /dev/sda\
+            Darwin: /dev/rdisk0'
+    )
+    mbr.add_argument(
+        'boot0',
+        help='path to a DUET MBR boot sector'
+    )
+    mbr.add_argument(
+        'drive',
+        help='path to destination device'
+    )
 
-pbr=subparsers.add_parser(
-    'pbr',
-    description='Install PBR chainloader',
-    epilog='Examples of partition paths:\
-        Windows: //./C:\
-        Linux: /dev/sda1\
-        Darwin: /dev/rdisk0s1'
-)
-pbr.add_argument(
-    'boot1',
-    help='path to a DUET boot1 file, containing the PBR chainloader'
-)
-pbr.add_argument(
-    'partition',
-    help='path to destination partition'
-)
+    pbr=subparsers.add_parser(
+        'pbr',
+        description='Install PBR chainloader',
+        epilog='Examples of partition paths:\
+            Windows: //./C:\
+            Linux: /dev/sda1\
+            Darwin: /dev/rdisk0s1'
+    )
+    pbr.add_argument(
+        'boot1',
+        help='path to a DUET PBR boot sector'
+    )
+    pbr.add_argument(
+        'partition',
+        help='path to destination partition'
+    )
 
-args=parser.parse_args()
+    args=parser.parse_args()
 
-if 'boot0' in args:
-    writembr(args.drive, args.boot0)
+    if 'boot0' in args:
+        writembr(args.drive, args.boot0)
 
-if 'boot1' in args:
-    writepbr(args.partition, args.boot1)
+    if 'boot1' in args:
+        writepbr(args.partition, args.boot1)
