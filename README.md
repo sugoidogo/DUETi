@@ -25,7 +25,7 @@ python3 dueti.py pbr boot1f32alt /dev/sda1
 ### NT (Windows)
 
 ```
-python3 dueti.py mbr boot0ss //./PhysicalDisk1
+python3 dueti.py mbr boot0ss //./PhysicalDrive1
 python3 dueti.py pbr boot1f32alt //./D:
 ```
 
