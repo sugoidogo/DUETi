@@ -1,6 +1,55 @@
-import os
+import os,json,zipfile,re
+from urllib.request import urlopen
+from urllib.error import HTTPError
+from io import BytesIO
+from sys import stderr
+
+def downloadDUET(url):
+    response=urlopen(url)
+    dlname=response.headers['content-disposition']
+    dlname=dlname.replace('attachment; filename=','')
+    dlname=dlname.replace('"','')
+    with zipfile.ZipFile(BytesIO(response.read())) as archive:
+        extract=False
+        namelist=archive.namelist()
+        namelist.reverse()
+        for filename in namelist:
+            if re.search(args.boot0,filename):
+                print('found boot0 as '+filename+' in '+dlname)
+                args.boot0=args.destination+'/'+dlname+'/'+filename
+                extract=True
+                continue
+            if re.search(args.boot1,filename):
+                print('found boot1 as '+filename+' in '+dlname)
+                args.boot1=args.destination+'/'+dlname+'/'+filename
+                extract=True
+        if extract:
+            print('extracting '+dlname+' to '+args.destination)
+            archive.extractall(args.destination+'/'+dlname)
+            return True
+    print('DUET not found')
+    return False
+
+def downloadGitHub(source):
+    match source:
+        case 'clover':
+            source='CloverHackyColor/CloverBootloader'
+        case 'opencore':
+            source='acidanthera/OpenCorePkg'
+
+    print('getting latest release from '+source)
+    response=urlopen('https://api.github.com/repos/'+source+'/releases/latest')
+    response=response.read()
+    response=json.loads(response)
+    for asset in response['assets']:
+        if(asset['name'].endswith('.zip')):
+            print('searching '+asset['name'])
+            if(downloadDUET(asset['browser_download_url'])):
+                return True
+    print('no matching files found in release archives')
 
 def writembr(drive,boot0):
+    print('writing '+boot0+' to '+args.drive)
     drive=os.open(drive, os.O_RDWR | os.O_BINARY)
     boot0=os.open(boot0, os.O_RDONLY | os.O_BINARY)
 
@@ -14,6 +63,7 @@ def writembr(drive,boot0):
     os.close(drive)
 
 def writepbr(part,boot1):
+    print('writing '+boot1+' to '+args.partition)
     part=os.open(part, os.O_RDWR | os.O_BINARY)
     boot1=os.open(boot1, os.O_RDONLY | os.O_BINARY)
 
@@ -71,10 +121,72 @@ if __name__ == '__main__':
         help='path to destination partition'
     )
 
+    download=subparsers.add_parser(
+        'download',
+        description='Download DUET files from GitHub'
+    )
+    download.add_argument(
+        '-s',
+        '--source',
+        help='author/name of a GitHub repository,\
+            or one of: clover,opencore,edk2015,edk2020',
+        default='clover'
+    )
+    download.add_argument(
+        '-d',
+        '--destination',
+        help='path to extract archives to',
+        default='downloads'
+    )
+    download.add_argument(
+        '-0',
+        '--boot0',
+        help='regex for boot0 file to auto-select',
+        default='(boot0(md)?|Mbr.com)$'
+    )
+    download.add_argument(
+        '-1',
+        '--boot1',
+        help='regex for boot1 file to auto-select',
+        default='(boot1f32(alt)?|bs32.com)$'
+    )
+    download.add_argument(
+        '--drive',
+        '-m',
+        '--mbr',
+        help='path to destination drive',
+    )
+    download.add_argument(
+        '--partition',
+        '-p',
+        '--pbr',
+        help='path to destination partition',
+    )
+
     args=parser.parse_args()
 
-    if 'boot0' in args:
+    if args.source:
+        # https://winraid.level1techs.com/t/guide-nvme-boot-for-systems-with-legacy-bios-and-uefi-board-duet-refind/32251
+        match args.source:
+            case 'edk2015':
+                args.source='https://drive.usercontent.google.com/download?id=1NtXFq__OYDX4uM-x3lzHDFFhjNO79m7p&export=download&authuser=0'
+            case 'edk2020':
+                args.source='https://drive.usercontent.google.com/download?id=1ogEdBzKrLRkz0SRwLphpFemRLWmgayA-&export=download&authuser=0'
+        try:
+            if args.source.startswith('http'):
+                if not downloadDUET(args.source):
+                    exit(1)
+            else:
+                if not downloadGitHub(args.source):
+                    exit(1)
+        except HTTPError as error:
+            print(error,file=stderr)
+            exit(1)
+
+    if args.drive:
         writembr(args.drive, args.boot0)
 
-    if 'boot1' in args:
+    if args.partition:
         writepbr(args.partition, args.boot1)
+    
+    print('done')
