@@ -1,12 +1,17 @@
-import os,json,zipfile,re,logging
-from urllib.request import urlopen
-from urllib.error import HTTPError
-from io import BytesIO
-from sys import stderr,stdout
+import logging
 
 log=logging.getLogger(__name__)
 
-def downloadDUET(url):
+DEFAULT_REGEX_BOOT0='(boot0(md)?|Mbr.com)$'
+DEFAULT_REGEX_BOOT1='(boot1f32(alt)?|bs32.com)$'
+DEFAULT_DESTINATION='downloads'
+
+def downloadHTTP(url,boot0=DEFAULT_REGEX_BOOT0,boot1=DEFAULT_REGEX_BOOT1,destination=DEFAULT_DESTINATION):
+    from urllib.request import urlopen
+    from io import BytesIO
+    import zipfile,re
+
+    log.debug('searching for '+boot0+' and '+boot1)
     log.debug('opening '+url)
     response=urlopen(url)
     dlname=response.headers['content-disposition']
@@ -19,29 +24,39 @@ def downloadDUET(url):
         namelist.reverse()
         for filename in namelist:
             #log.debug(filename)
-            if re.search(args.boot0,filename):
+            if re.search(boot0,filename):
                 log.info('found boot0 as '+filename+' in '+dlname)
-                args.boot0=args.destination+'/'+dlname+'/'+filename
+                boot0=destination+'/'+dlname+'/'+filename
                 extract=True
                 continue
-            if re.search(args.boot1,filename):
+            if re.search(boot1,filename):
                 log.info('found boot1 as '+filename+' in '+dlname)
-                args.boot1=args.destination+'/'+dlname+'/'+filename
+                boot1=destination+'/'+dlname+'/'+filename
                 extract=True
         if extract:
-            log.info('extracting '+dlname+' to '+args.destination)
-            archive.extractall(args.destination+'/'+dlname)
-            return True
-    log.error('DUET not found')
-    return False
+            log.info('extracting '+dlname+' to '+destination)
+            archive.extractall(destination+'/'+dlname)
+            return boot0,boot1
+    raise FileNotFoundError('DUET mbr/pbr not found')
 
-def downloadGitHub(source):
+def downloadDUET(source,boot0=DEFAULT_REGEX_BOOT0,boot1=DEFAULT_REGEX_BOOT1,destination=DEFAULT_DESTINATION):
+    from urllib.request import urlopen
+    import json
+
     match source:
         case 'clover':
             source='CloverHackyColor/CloverBootloader'
         case 'opencore':
             source='acidanthera/OpenCorePkg'
+        # https://winraid.level1techs.com/t/guide-nvme-boot-for-systems-with-legacy-bios-and-uefi-board-duet-refind/32251
+        case 'edk2015':
+            args.source='https://drive.usercontent.google.com/download?id=1NtXFq__OYDX4uM-x3lzHDFFhjNO79m7p&export=download&authuser=0'
+        case 'edk2020':
+            args.source='https://drive.usercontent.google.com/download?id=1ogEdBzKrLRkz0SRwLphpFemRLWmgayA-&export=download&authuser=0'
 
+    if(source.startswith('http')):
+        return downloadHTTP(source)
+    
     log.info('getting latest release from '+source)
     url='https://api.github.com/repos/'+source+'/releases/latest'
     log.debug('opening '+url)
@@ -52,13 +67,17 @@ def downloadGitHub(source):
         log.debug('found '+asset['name'])
         if(asset['name'].endswith('.zip')):
             log.info('searching '+asset['name'])
-            if(downloadDUET(asset['browser_download_url'])):
-                return True
-    log.error('no matching files found in release archives')
-    return False
+            try:
+                return downloadHTTP(asset['browser_download_url'],boot0,boot1,destination)
+            except FileNotFoundError as e:
+                log.warning(e)
+                pass
+    raise FileNotFoundError('DUET mbr/pbr not found')
 
 def writembr(drive,boot0):
-    log.info('writing '+boot0+' to '+args.drive)
+    import os
+
+    log.info('writing '+boot0+' to '+drive)
     drive=os.open(drive, os.O_RDWR | os.O_BINARY)
     boot0=os.open(boot0, os.O_RDONLY | os.O_BINARY)
 
@@ -72,7 +91,9 @@ def writembr(drive,boot0):
     os.close(drive)
 
 def writepbr(part,boot1):
-    log.info('writing '+boot1+' to '+args.partition)
+    import os
+
+    log.info('writing '+boot1+' to '+part)
     part=os.open(part, os.O_RDWR | os.O_BINARY)
     boot1=os.open(boot1, os.O_RDONLY | os.O_BINARY)
 
@@ -87,8 +108,9 @@ def writepbr(part,boot1):
     os.close(boot1)
     os.close(part)
 
-if __name__ == '__main__':
+def main():
     import argparse
+    from sys import stdout
 
     logging.basicConfig(stream=stdout,level=logging.INFO,format='%(message)s')
 
@@ -154,19 +176,19 @@ if __name__ == '__main__':
         '-d',
         '--destination',
         help='path to extract archives to',
-        default='downloads'
+        default=DEFAULT_DESTINATION
     )
     download.add_argument(
         '-0',
         '--boot0',
         help='regex for boot0 file to auto-select',
-        default='(boot0(md)?|Mbr.com)$'
+        default=DEFAULT_REGEX_BOOT0
     )
     download.add_argument(
         '-1',
         '--boot1',
         help='regex for boot1 file to auto-select',
-        default='(boot1f32(alt)?|bs32.com)$'
+        default=DEFAULT_REGEX_BOOT1
     )
     download.add_argument(
         '--drive',
@@ -195,23 +217,10 @@ if __name__ == '__main__':
         case 'critical':
             log.setLevel(logging.CRITICAL)
 
+    log.debug('log level = '+args.level.lower())
+
     if args.source:
-        # https://winraid.level1techs.com/t/guide-nvme-boot-for-systems-with-legacy-bios-and-uefi-board-duet-refind/32251
-        match args.source:
-            case 'edk2015':
-                args.source='https://drive.usercontent.google.com/download?id=1NtXFq__OYDX4uM-x3lzHDFFhjNO79m7p&export=download&authuser=0'
-            case 'edk2020':
-                args.source='https://drive.usercontent.google.com/download?id=1ogEdBzKrLRkz0SRwLphpFemRLWmgayA-&export=download&authuser=0'
-        try:
-            if args.source.startswith('http'):
-                if not downloadDUET(args.source):
-                    exit(1)
-            else:
-                if not downloadGitHub(args.source):
-                    exit(1)
-        except HTTPError as error:
-            log.info(error,file=stderr)
-            exit(1)
+        args.boot0,args.boot1=downloadDUET(args.source,args.boot0,args.boot1,args.destination)
 
     if args.drive:
         writembr(args.drive, args.boot0)
@@ -220,3 +229,15 @@ if __name__ == '__main__':
         writepbr(args.partition, args.boot1)
     
     log.info('done')
+
+if __name__ == '__main__':
+    import traceback
+
+    try:
+        main()
+    except Exception as e:
+        trace=traceback.format_exception(e)
+        exception=trace.pop()
+        log.critical(exception)
+        log.debug('\n'.join(trace))
+        exit(1)
