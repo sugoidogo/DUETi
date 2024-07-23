@@ -1,33 +1,38 @@
-import os,json,zipfile,re
+import os,json,zipfile,re,logging
 from urllib.request import urlopen
 from urllib.error import HTTPError
 from io import BytesIO
-from sys import stderr
+from sys import stderr,stdout
+
+log=logging.getLogger(__name__)
 
 def downloadDUET(url):
+    log.debug('opening '+url)
     response=urlopen(url)
     dlname=response.headers['content-disposition']
     dlname=dlname.replace('attachment; filename=','')
     dlname=dlname.replace('"','')
+    log.debug('got '+dlname)
     with zipfile.ZipFile(BytesIO(response.read())) as archive:
         extract=False
         namelist=archive.namelist()
         namelist.reverse()
         for filename in namelist:
+            #log.debug(filename)
             if re.search(args.boot0,filename):
-                print('found boot0 as '+filename+' in '+dlname)
+                log.info('found boot0 as '+filename+' in '+dlname)
                 args.boot0=args.destination+'/'+dlname+'/'+filename
                 extract=True
                 continue
             if re.search(args.boot1,filename):
-                print('found boot1 as '+filename+' in '+dlname)
+                log.info('found boot1 as '+filename+' in '+dlname)
                 args.boot1=args.destination+'/'+dlname+'/'+filename
                 extract=True
         if extract:
-            print('extracting '+dlname+' to '+args.destination)
+            log.info('extracting '+dlname+' to '+args.destination)
             archive.extractall(args.destination+'/'+dlname)
             return True
-    print('DUET not found')
+    log.error('DUET not found')
     return False
 
 def downloadGitHub(source):
@@ -37,19 +42,23 @@ def downloadGitHub(source):
         case 'opencore':
             source='acidanthera/OpenCorePkg'
 
-    print('getting latest release from '+source)
-    response=urlopen('https://api.github.com/repos/'+source+'/releases/latest')
+    log.info('getting latest release from '+source)
+    url='https://api.github.com/repos/'+source+'/releases/latest'
+    log.debug('opening '+url)
+    response=urlopen(url)
     response=response.read()
     response=json.loads(response)
     for asset in response['assets']:
+        log.debug('found '+asset['name'])
         if(asset['name'].endswith('.zip')):
-            print('searching '+asset['name'])
+            log.info('searching '+asset['name'])
             if(downloadDUET(asset['browser_download_url'])):
                 return True
-    print('no matching files found in release archives')
+    log.error('no matching files found in release archives')
+    return False
 
 def writembr(drive,boot0):
-    print('writing '+boot0+' to '+args.drive)
+    log.info('writing '+boot0+' to '+args.drive)
     drive=os.open(drive, os.O_RDWR | os.O_BINARY)
     boot0=os.open(boot0, os.O_RDONLY | os.O_BINARY)
 
@@ -63,7 +72,7 @@ def writembr(drive,boot0):
     os.close(drive)
 
 def writepbr(part,boot1):
-    print('writing '+boot1+' to '+args.partition)
+    log.info('writing '+boot1+' to '+args.partition)
     part=os.open(part, os.O_RDWR | os.O_BINARY)
     boot1=os.open(boot1, os.O_RDONLY | os.O_BINARY)
 
@@ -80,11 +89,20 @@ def writepbr(part,boot1):
 
 if __name__ == '__main__':
     import argparse
-        
+
+    logging.basicConfig(stream=stdout,level=logging.INFO,format='%(message)s')
+
     parser=argparse.ArgumentParser(
         prog='dueti',
         description='DUET Installer'
     )
+
+    parser.add_argument(
+        '-l','--level',
+        help='logging level. One of: debug,info,warning,error,critical',
+        default='info'
+    )
+
     subparsers=parser.add_subparsers(required=True)
 
     mbr=subparsers.add_parser(
@@ -165,6 +183,18 @@ if __name__ == '__main__':
 
     args=parser.parse_args()
 
+    match args.level.lower():
+        case 'debug':
+            log.setLevel(logging.DEBUG)
+        case 'info':
+            log.setLevel(logging.INFO)
+        case 'warning':
+            log.setLevel(logging.WARNING)
+        case 'error':
+            log.setLevel(logging.ERROR)
+        case 'critical':
+            log.setLevel(logging.CRITICAL)
+
     if args.source:
         # https://winraid.level1techs.com/t/guide-nvme-boot-for-systems-with-legacy-bios-and-uefi-board-duet-refind/32251
         match args.source:
@@ -180,7 +210,7 @@ if __name__ == '__main__':
                 if not downloadGitHub(args.source):
                     exit(1)
         except HTTPError as error:
-            print(error,file=stderr)
+            log.info(error,file=stderr)
             exit(1)
 
     if args.drive:
@@ -189,4 +219,4 @@ if __name__ == '__main__':
     if args.partition:
         writepbr(args.partition, args.boot1)
     
-    print('done')
+    log.info('done')
