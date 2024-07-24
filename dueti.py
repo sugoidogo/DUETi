@@ -65,12 +65,12 @@ def downloadDUET(source,destination,mbr_regex=None,pbr_regex=None):
             source='acidanthera/OpenCorePkg'
         # https://winraid.level1techs.com/t/guide-nvme-boot-for-systems-with-legacy-bios-and-uefi-board-duet-refind/32251
         case 'edk2015':
-            args.download_source='https://drive.usercontent.google.com/download?id=1NtXFq__OYDX4uM-x3lzHDFFhjNO79m7p&export=download&authuser=0'
+            source='https://drive.usercontent.google.com/download?id=1NtXFq__OYDX4uM-x3lzHDFFhjNO79m7p&export=download&authuser=0'
         case 'edk2020':
-            args.download_source='https://drive.usercontent.google.com/download?id=1ogEdBzKrLRkz0SRwLphpFemRLWmgayA-&export=download&authuser=0'
+            source='https://drive.usercontent.google.com/download?id=1ogEdBzKrLRkz0SRwLphpFemRLWmgayA-&export=download&authuser=0'
 
     if(source.startswith('http')):
-        return downloadHTTP(source)
+        return downloadHTTP(source,destination)
     
     log.info('getting latest release from '+source)
     url='https://api.github.com/repos/'+source+'/releases/latest'
@@ -142,21 +142,19 @@ def main():
 
     parser.add_argument(
         '--mbr-source',
-        help='path to read mbr boot sector from'
+        help='path to read mbr boot sector from, or search regex when using --download-source'
     )
 
     parser.add_argument(
         '--pbr-source',
-        help='path to read pbr boot sector from'
+        help='path to read pbr boot sector from, or search regex when using --download-source'
     )
 
     parser.add_argument(
         '--download-source',
         help='source to download DUET files from.\
             one of: opencore, clover, edk2015, edk2020,\
-            or a GitHub repo in the format "author/name".\
-            In this mode, --(mbr/pbr)-source can be used\
-            to override the default regex for finding DUET files.'
+            or a GitHub repo in the format "author/name".'
     )
 
     parser.add_argument(
