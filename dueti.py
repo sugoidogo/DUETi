@@ -4,12 +4,15 @@ log=logging.getLogger(__name__)
 
 DEFAULT_MBR_REGEX='(boot0(md)?|Mbr.com)$'
 DEFAULT_PBR_REGEX='(boot1f32(alt)?|bs32.com)$'
+DEFAULT_COPY_REGEX='(boot(6|7|X64)|Efildr20|(?<!32)/EFI/|/Refind/|RefindPlus.REL.efi|Sample.plist)$'
+DEFAULT_RENAME=['bootX64:boot','boot7:boot','Sample.plist:efi/oc/Sample.plist','Refind:efi/boot',
+'EFI/Drivers:efi/boot/drivers','efi/boot/refind.efi:efi/boot/bootx64.efi','x64_RefindPlus_REL.efi:efi/boot/bootx64.efi']
 
 # os.O_BINARY = nt.O_BINARY = 4
 # since nt is platform-specific, we have to hard-code that value
 O_BINARY = 4
 
-def downloadHTTP(url,destination,mbr_regex=None,pbr_regex=None):
+def downloadHTTP(url,destination,mbr_regex=None,pbr_regex=None,copy_regex=None):
     from urllib.request import urlopen
     from io import BytesIO
     import zipfile,re
@@ -18,8 +21,8 @@ def downloadHTTP(url,destination,mbr_regex=None,pbr_regex=None):
         mbr_regex=DEFAULT_MBR_REGEX
     if not pbr_regex:
         pbr_regex=DEFAULT_PBR_REGEX
-
-    log.debug('downloadHTTP('+url+','+destination+','+mbr_regex+','+pbr_regex+')')
+    if not copy_regex:
+        copy_regex=DEFAULT_COPY_REGEX
 
     response=urlopen(url)
     dlname=response.headers['content-disposition']
@@ -28,26 +31,34 @@ def downloadHTTP(url,destination,mbr_regex=None,pbr_regex=None):
     log.debug('got '+dlname)
     with zipfile.ZipFile(BytesIO(response.read())) as archive:
         extract=False
-        namelist=archive.namelist()
-        namelist.reverse()
-        for filename in namelist:
+        mbr_source=None
+        pbr_source=None
+        copy_source=[]
+        for filename in archive.namelist():
             #log.debug(filename)
+            extracted_path=destination+'/'+dlname+'/'+filename
             if re.search(mbr_regex,filename):
-                log.info('found mbr chainloader as '+filename+' in '+dlname)
-                mbr_regex=destination+'/'+dlname+'/'+filename
+                log.info('found mbr chainloader at '+filename+' in '+dlname)
+                mbr_source=extracted_path
                 extract=True
                 continue
             if re.search(pbr_regex,filename):
-                log.info('found pbr chainloader as '+filename+' in '+dlname)
-                pbr_regex=destination+'/'+dlname+'/'+filename
+                log.info('found pbr chainloader at '+filename+' in '+dlname)
+                pbr_source=extracted_path
                 extract=True
+                continue
+            if re.search(copy_regex,filename):
+                log.info('found bootloader file(s) at '+filename+' in '+dlname)
+                copy_source.append(extracted_path)
+                extract=True
+                continue
         if extract:
             log.info('extracting '+dlname+' to '+destination)
             archive.extractall(destination+'/'+dlname)
-            return mbr_regex,pbr_regex
-    raise FileNotFoundError('DUET mbr/pbr not found')
+            return mbr_source,pbr_source,copy_source
+    raise FileNotFoundError('DUET files not found')
 
-def downloadDUET(source,destination,mbr_regex=None,pbr_regex=None):
+def downloadDUET(source,destination,mbr_regex=None,pbr_regex=None,copy_regex=None):
     from urllib.request import urlopen
     import json
 
@@ -55,14 +66,16 @@ def downloadDUET(source,destination,mbr_regex=None,pbr_regex=None):
         mbr_regex=DEFAULT_MBR_REGEX
     if not pbr_regex:
         pbr_regex=DEFAULT_PBR_REGEX
-
-    log.debug('downloadDUET('+source+','+destination+','+mbr_regex+','+pbr_regex+')')
+    if not copy_regex:
+        copy_regex=DEFAULT_COPY_REGEX
 
     match source:
         case 'clover':
             source='CloverHackyColor/CloverBootloader'
         case 'opencore':
             source='acidanthera/OpenCorePkg'
+        case 'refindplus':
+            source='dakanji/RefindPlus'
         # https://winraid.level1techs.com/t/guide-nvme-boot-for-systems-with-legacy-bios-and-uefi-board-duet-refind/32251
         case 'edk2015':
             source='https://drive.usercontent.google.com/download?id=1NtXFq__OYDX4uM-x3lzHDFFhjNO79m7p&export=download&authuser=0'
@@ -83,11 +96,11 @@ def downloadDUET(source,destination,mbr_regex=None,pbr_regex=None):
         if(asset['name'].endswith('.zip')):
             log.info('searching '+asset['name'])
             try:
-                return downloadHTTP(asset['browser_download_url'],destination,mbr_regex,pbr_regex)
+                return downloadHTTP(asset['browser_download_url'],destination,mbr_regex,pbr_regex,copy_regex)
             except FileNotFoundError as e:
                 log.warning(e)
                 pass
-    raise FileNotFoundError('DUET mbr/pbr not found')
+    raise FileNotFoundError('DUET files not found')
 
 def writembr(source,dest):
     import os
@@ -123,6 +136,34 @@ def writepbr(source,dest):
     os.close(source)
     os.close(dest)
 
+def copy(sources,dest,renames=[]):
+    from shutil import copy2,copytree,rmtree,move
+
+    for source in sources:
+        try:
+            if source[-1]=='/':
+                source=source[:-1]
+            basename=source.split('/')[-1]
+            copytree(source,dest+'/'+basename,dirs_exist_ok=True)
+            log.info('copied '+source+' to '+dest+'/'+basename)
+        except NotADirectoryError:
+            copy2(source,dest+'/'+basename)
+            log.info('copied '+source+' to '+dest+'/'+basename)
+        except FileNotFoundError:
+            log.debug('file not found, skipping move of '+source)
+    
+    for rename in renames:
+        sourcename,destname=rename.split(':')
+        try:
+            copytree(dest+'/'+sourcename,dest+'/'+destname,dirs_exist_ok=True,copy_function=move)
+            rmtree(dest+'/'+sourcename)
+            log.info('moved '+sourcename+' to '+destname)
+        except NotADirectoryError:
+            move(dest+'/'+sourcename,dest+'/'+destname)
+            log.info('moved '+sourcename+' to '+destname)
+        except FileNotFoundError:
+            log.debug('file not found, skipping rename of '+sourcename)
+
 def main():
     import argparse
     from sys import stdout
@@ -151,6 +192,11 @@ def main():
     )
 
     parser.add_argument(
+        '--copy-source',
+        help='path to copy bootloader file(s) from, or search regex when using --download-source'
+    )
+
+    parser.add_argument(
         '--download-source',
         help='source to download DUET files from.\
             one of: opencore, clover, edk2015, edk2020,\
@@ -171,6 +217,18 @@ def main():
     parser.add_argument(
         '--pbr-dest',
         help='path to write pbr boot sector to'
+    )
+
+    parser.add_argument(
+        '--copy-dest',
+        help='path to copy bootloader file(s) to'
+    )
+
+    parser.add_argument(
+        '--rename',
+        help='rename a copied file at the destination',
+        metavar='OLDNAME:NEWNAME',
+        action='extend'
     )
 
     args=parser.parse_args()
@@ -195,7 +253,7 @@ def main():
         exit(1)
 
     if args.download_source:
-        args.mbr_source,args.pbr_source=downloadDUET(args.download_source,args.download_dest,args.mbr_source,args.pbr_source)
+        args.mbr_source,args.pbr_source,args.copy_source=downloadDUET(args.download_source,args.download_dest,args.mbr_source,args.pbr_source)
 
     if args.mbr_dest:
         if not args.mbr_source:
@@ -208,6 +266,11 @@ def main():
             log.error('one of --download-source or --pbr-source required with --pbr-dest')
             exit(1)
         writepbr(args.pbr_source, args.pbr_dest)
+
+    if args.copy_source and len(args.copy_source) != 0:
+        if not args.rename:
+            args.rename=DEFAULT_RENAME
+        copy(args.copy_source,args.copy_dest,args.rename)
     
     log.info('done')
 
