@@ -2,21 +2,25 @@ import logging
 
 log=logging.getLogger(__name__)
 
-DEFAULT_REGEX_BOOT0='(boot0(md)?|Mbr.com)$'
-DEFAULT_REGEX_BOOT1='(boot1f32(alt)?|bs32.com)$'
-DEFAULT_DESTINATION='downloads'
+DEFAULT_MBR_REGEX='(boot0(md)?|Mbr.com)$'
+DEFAULT_PBR_REGEX='(boot1f32(alt)?|bs32.com)$'
 
 # os.O_BINARY = nt.O_BINARY = 4
 # since nt is platform-specific, we have to hard-code that value
 O_BINARY = 4
 
-def downloadHTTP(url,boot0=DEFAULT_REGEX_BOOT0,boot1=DEFAULT_REGEX_BOOT1,destination=DEFAULT_DESTINATION):
+def downloadHTTP(url,destination,mbr_regex=None,pbr_regex=None):
     from urllib.request import urlopen
     from io import BytesIO
     import zipfile,re
 
-    log.debug('searching for '+boot0+' and '+boot1)
-    log.debug('opening '+url)
+    if not mbr_regex:
+        mbr_regex=DEFAULT_MBR_REGEX
+    if not pbr_regex:
+        pbr_regex=DEFAULT_PBR_REGEX
+
+    log.debug('downloadHTTP('+url+','+destination+','+mbr_regex+','+pbr_regex+')')
+
     response=urlopen(url)
     dlname=response.headers['content-disposition']
     dlname=dlname.replace('attachment; filename=','')
@@ -28,24 +32,31 @@ def downloadHTTP(url,boot0=DEFAULT_REGEX_BOOT0,boot1=DEFAULT_REGEX_BOOT1,destina
         namelist.reverse()
         for filename in namelist:
             #log.debug(filename)
-            if re.search(boot0,filename):
-                log.info('found boot0 as '+filename+' in '+dlname)
-                boot0=destination+'/'+dlname+'/'+filename
+            if re.search(mbr_regex,filename):
+                log.info('found mbr chainloader as '+filename+' in '+dlname)
+                mbr_regex=destination+'/'+dlname+'/'+filename
                 extract=True
                 continue
-            if re.search(boot1,filename):
-                log.info('found boot1 as '+filename+' in '+dlname)
-                boot1=destination+'/'+dlname+'/'+filename
+            if re.search(pbr_regex,filename):
+                log.info('found pbr chainloader as '+filename+' in '+dlname)
+                pbr_regex=destination+'/'+dlname+'/'+filename
                 extract=True
         if extract:
             log.info('extracting '+dlname+' to '+destination)
             archive.extractall(destination+'/'+dlname)
-            return boot0,boot1
+            return mbr_regex,pbr_regex
     raise FileNotFoundError('DUET mbr/pbr not found')
 
-def downloadDUET(source,boot0=DEFAULT_REGEX_BOOT0,boot1=DEFAULT_REGEX_BOOT1,destination=DEFAULT_DESTINATION):
+def downloadDUET(source,destination,mbr_regex=None,pbr_regex=None):
     from urllib.request import urlopen
     import json
+
+    if not mbr_regex:
+        mbr_regex=DEFAULT_MBR_REGEX
+    if not pbr_regex:
+        pbr_regex=DEFAULT_PBR_REGEX
+
+    log.debug('downloadDUET('+source+','+destination+','+mbr_regex+','+pbr_regex+')')
 
     match source:
         case 'clover':
@@ -54,9 +65,9 @@ def downloadDUET(source,boot0=DEFAULT_REGEX_BOOT0,boot1=DEFAULT_REGEX_BOOT1,dest
             source='acidanthera/OpenCorePkg'
         # https://winraid.level1techs.com/t/guide-nvme-boot-for-systems-with-legacy-bios-and-uefi-board-duet-refind/32251
         case 'edk2015':
-            args.source='https://drive.usercontent.google.com/download?id=1NtXFq__OYDX4uM-x3lzHDFFhjNO79m7p&export=download&authuser=0'
+            args.download_source='https://drive.usercontent.google.com/download?id=1NtXFq__OYDX4uM-x3lzHDFFhjNO79m7p&export=download&authuser=0'
         case 'edk2020':
-            args.source='https://drive.usercontent.google.com/download?id=1ogEdBzKrLRkz0SRwLphpFemRLWmgayA-&export=download&authuser=0'
+            args.download_source='https://drive.usercontent.google.com/download?id=1ogEdBzKrLRkz0SRwLphpFemRLWmgayA-&export=download&authuser=0'
 
     if(source.startswith('http')):
         return downloadHTTP(source)
@@ -72,45 +83,45 @@ def downloadDUET(source,boot0=DEFAULT_REGEX_BOOT0,boot1=DEFAULT_REGEX_BOOT1,dest
         if(asset['name'].endswith('.zip')):
             log.info('searching '+asset['name'])
             try:
-                return downloadHTTP(asset['browser_download_url'],boot0,boot1,destination)
+                return downloadHTTP(asset['browser_download_url'],destination,mbr_regex,pbr_regex)
             except FileNotFoundError as e:
                 log.warning(e)
                 pass
     raise FileNotFoundError('DUET mbr/pbr not found')
 
-def writembr(drive,boot0):
+def writembr(source,dest):
     import os
 
-    log.info('writing '+boot0+' to '+drive)
-    drive=os.open(drive, os.O_RDWR | O_BINARY)
-    boot0=os.open(boot0, os.O_RDONLY | O_BINARY)
+    log.info('writing '+source+' to '+dest)
+    dest=os.open(dest, os.O_RDWR | O_BINARY)
+    source=os.open(source, os.O_RDONLY | O_BINARY)
 
-    buffer=os.read(boot0, 440)
-    buffer+=os.read(drive, 512)[440:]
-    os.lseek(drive, 0, os.SEEK_SET)
-    os.write(drive, buffer)
-    os.fsync(drive)
+    buffer=os.read(source, 440)
+    buffer+=os.read(dest, 512)[440:]
+    os.lseek(dest, 0, os.SEEK_SET)
+    os.write(dest, buffer)
+    os.fsync(dest)
 
-    os.close(boot0)
-    os.close(drive)
+    os.close(source)
+    os.close(dest)
 
-def writepbr(part,boot1):
+def writepbr(source,dest):
     import os
 
-    log.info('writing '+boot1+' to '+part)
-    part=os.open(part, os.O_RDWR | O_BINARY)
-    boot1=os.open(boot1, os.O_RDONLY | O_BINARY)
+    log.info('writing '+source+' to '+dest)
+    dest=os.open(dest, os.O_RDWR | O_BINARY)
+    source=os.open(source, os.O_RDONLY | O_BINARY)
 
-    buffer=os.read(boot1, 3)
-    buffer+=os.read(part, 512)[3:90]
-    os.lseek(boot1, 90, os.SEEK_SET)
-    buffer+=os.read(boot1, 422)
-    os.lseek(part, 0, os.SEEK_SET)
-    os.write(part, buffer)
-    os.fsync(part)
+    buffer=os.read(source, 3)
+    buffer+=os.read(dest, 512)[3:90]
+    os.lseek(source, 90, os.SEEK_SET)
+    buffer+=os.read(source, 422)
+    os.lseek(dest, 0, os.SEEK_SET)
+    os.write(dest, buffer)
+    os.fsync(dest)
 
-    os.close(boot1)
-    os.close(part)
+    os.close(source)
+    os.close(dest)
 
 def main():
     import argparse
@@ -124,87 +135,44 @@ def main():
     )
 
     parser.add_argument(
-        '-l','--level',
+        '-l','--level','--log-level',
         help='logging level. One of: debug,info,warning,error,critical',
         default='info'
     )
 
-    subparsers=parser.add_subparsers(required=True)
-
-    mbr=subparsers.add_parser(
-        'mbr',
-        description='Install MBR chainloader',
-        epilog='Examples of drive paths:\
-            Windows: //./PhysicalDrive0\
-            Linux: /dev/sda\
-            Darwin: /dev/rdisk0'
-    )
-    mbr.add_argument(
-        'boot0',
-        help='path to a DUET MBR boot sector'
-    )
-    mbr.add_argument(
-        'drive',
-        help='path to destination device'
+    parser.add_argument(
+        '--mbr-source',
+        help='path to read mbr boot sector from'
     )
 
-    pbr=subparsers.add_parser(
-        'pbr',
-        description='Install PBR chainloader',
-        epilog='Examples of partition paths:\
-            Windows: //./C:\
-            Linux: /dev/sda1\
-            Darwin: /dev/rdisk0s1'
-    )
-    pbr.add_argument(
-        'boot1',
-        help='path to a DUET PBR boot sector'
-    )
-    pbr.add_argument(
-        'partition',
-        help='path to destination partition'
+    parser.add_argument(
+        '--pbr-source',
+        help='path to read pbr boot sector from'
     )
 
-    download=subparsers.add_parser(
-        'download',
-        description='Download DUET files from GitHub'
+    parser.add_argument(
+        '--download-source',
+        help='source to download DUET files from.\
+            one of: opencore, clover, edk2015, edk2020,\
+            or a GitHub repo in the format "author/name".\
+            In this mode, --(mbr/pbr)-source can be used\
+            to override the default regex for finding DUET files.'
     )
-    download.add_argument(
-        '-s',
-        '--source',
-        help='author/name of a GitHub repository,\
-            or one of: clover,opencore,edk2015,edk2020',
-        default='clover'
+
+    parser.add_argument(
+        '--download-dest',
+        help='path to download DUET files to. Defaults to ./downloads',
+        default='./downloads'
     )
-    download.add_argument(
-        '-d',
-        '--destination',
-        help='path to extract archives to',
-        default=DEFAULT_DESTINATION
+    
+    parser.add_argument(
+        '--mbr-dest',
+        help='path to write mbr boot sector to'
     )
-    download.add_argument(
-        '-0',
-        '--boot0',
-        help='regex for boot0 file to auto-select',
-        default=DEFAULT_REGEX_BOOT0
-    )
-    download.add_argument(
-        '-1',
-        '--boot1',
-        help='regex for boot1 file to auto-select',
-        default=DEFAULT_REGEX_BOOT1
-    )
-    download.add_argument(
-        '--drive',
-        '-m',
-        '--mbr',
-        help='path to destination drive',
-    )
-    download.add_argument(
-        '--partition',
-        '-p',
-        '--pbr',
-        help='path to destination partition',
+
+    parser.add_argument(
+        '--pbr-dest',
+        help='path to write pbr boot sector to'
     )
 
     args=parser.parse_args()
@@ -223,14 +191,25 @@ def main():
 
     log.debug('log level = '+args.level.lower())
 
-    if args.source:
-        args.boot0,args.boot1=downloadDUET(args.source,args.boot0,args.boot1,args.destination)
+    if not (args.download_source or args.mbr_dest or args.pbr_dest):
+        log.error('one of --download_source, --mbr-dest, or --pbr-dest is required')
+        parser.print_help()
+        exit(1)
 
-    if args.drive:
-        writembr(args.drive, args.boot0)
+    if args.download_source:
+        args.mbr_source,args.pbr_source=downloadDUET(args.download_source,args.download_dest,args.mbr_source,args.pbr_source)
 
-    if args.partition:
-        writepbr(args.partition, args.boot1)
+    if args.mbr_dest:
+        if not args.mbr_source:
+            log.error('one of --download-source or --mbr-source required with --mbr-dest')
+            exit(1)
+        writembr(args.mbr_source, args.mbr_dest)
+
+    if args.pbr_dest:
+        if not args.pbr_source:
+            log.error('one of --download-source or --pbr-source required with --pbr-dest')
+            exit(1)
+        writepbr(args.pbr_source, args.pbr_dest)
     
     log.info('done')
 
