@@ -6,6 +6,10 @@ DEFAULT_REGEX_BOOT0='(boot0(md)?|Mbr.com)$'
 DEFAULT_REGEX_BOOT1='(boot1f32(alt)?|bs32.com)$'
 DEFAULT_DESTINATION='downloads'
 
+# os.O_BINARY = nt.O_BINARY = 4
+# since nt is platform-specific, we have to hard-code that value
+O_BINARY = 4
+
 def downloadHTTP(url,boot0=DEFAULT_REGEX_BOOT0,boot1=DEFAULT_REGEX_BOOT1,destination=DEFAULT_DESTINATION):
     from urllib.request import urlopen
     from io import BytesIO
@@ -78,8 +82,8 @@ def writembr(drive,boot0):
     import os
 
     log.info('writing '+boot0+' to '+drive)
-    drive=os.open(drive, os.O_RDWR | os.O_BINARY)
-    boot0=os.open(boot0, os.O_RDONLY | os.O_BINARY)
+    drive=os.open(drive, os.O_RDWR | O_BINARY)
+    boot0=os.open(boot0, os.O_RDONLY | O_BINARY)
 
     buffer=os.read(boot0, 440)
     buffer+=os.read(drive, 512)[440:]
@@ -94,8 +98,8 @@ def writepbr(part,boot1):
     import os
 
     log.info('writing '+boot1+' to '+part)
-    part=os.open(part, os.O_RDWR | os.O_BINARY)
-    boot1=os.open(boot1, os.O_RDONLY | os.O_BINARY)
+    part=os.open(part, os.O_RDWR | O_BINARY)
+    boot1=os.open(boot1, os.O_RDONLY | O_BINARY)
 
     buffer=os.read(boot1, 3)
     buffer+=os.read(part, 512)[3:90]
