@@ -19,25 +19,22 @@ DUETi can now also download the bootloader files for you from GitHub releases fo
 ### Darwin (Mac)
 
 ```
-python3 dueti.py mbr boot0 /dev/rdisk1
-python3 dueti.py pbr boot1f32 /dev/rdisk1s1
-python3 dueti.py download --source opencore --drive /dev/rdisk1 --partition /dev/rdisk1s1
+python3 dueti.py --mbr-source boot0 --mbr-dest /dev/rdisk1 --pbr-source boot1f32 --pbr-dest /dev/rdisk1s1
+python3 dueti.py --download-source opencore --mbr-dest /dev/rdisk1 --pbr-dest /dev/rdisk1s1
 ```
 
 ### Linux
 
 ```
-python3 dueti.py mbr boot0md /dev/sdb
-python3 dueti.py pbr boot1f32alt /dev/sdb1
-python3 dueti.py download --source clover --drive /dev/sdb --partition /dev/sdb1
+python3 dueti.py --mbr-source boot0md --mbr-dest /dev/sdb --pbr-source boot1f32alt --pbr-dest /dev/sdb1
+python3 dueti.py --download-source clover --mbr-dest /dev/sdb --pbr-dest /dev/sdb1
 ```
 
 ### NT (Windows)
 
 ```
-python3 dueti.py mbr mbr.com //./PhysicalDrive1
-python3 dueti.py pbr bs32.com //./D:
-python3 dueti.py download --source edk2015 --drive //./PhysicalDrive1 --partition //./D:
+python3 dueti.py --mbr-source mbr.com --mbr-dest //./PhysicalDrive1 --pbr-source bs32.com --pbr-dest //./D:
+python3 dueti.py --download-source edk2015 --mbr-dest //./PhysicalDrive1 --pbr-dest //./D:
 ```
 
 ## Technical Details
