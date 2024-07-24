@@ -4,7 +4,7 @@ log=logging.getLogger(__name__)
 
 DEFAULT_MBR_REGEX='(boot0(md)?|Mbr.com)$'
 DEFAULT_PBR_REGEX='(boot1f32(alt)?|bs32.com)$'
-DEFAULT_COPY_REGEX='(boot(6|7|X64)|Efildr20|(?<!32)/EFI/|/Refind/|RefindPlus.REL.efi|Sample.plist)$'
+DEFAULT_COPY_REGEX='(boot(6|7|X64)|Efildr20|glrdr|menu.lst|(?<!32)/EFI/|/Refind/|RefindPlus.REL.efi|Sample.plist)$'
 DEFAULT_RENAME=['bootX64:boot','boot7:boot','Sample.plist:efi/oc/Sample.plist','Refind:efi/boot',
 'EFI/Drivers:efi/boot/drivers','efi/boot/refind.efi:efi/boot/bootx64.efi','x64_RefindPlus_REL.efi:efi/boot/bootx64.efi']
 
@@ -74,6 +74,9 @@ def downloadDUET(source,destination,mbr_regex=None,pbr_regex=None,copy_regex=Non
             source='CloverHackyColor/CloverBootloader'
         case 'opencore':
             source='acidanthera/OpenCorePkg'
+        # https://www.insanelymac.com/forum/topic/359685-a-tip-for-anyone-who-wants-to-run-a-uefi-operating-system-on-a-bios-only-commuter/
+        case 'grub4dos':
+            source='chenall/grub4dos'
         case 'refindplus':
             source='dakanji/RefindPlus'
         # https://winraid.level1techs.com/t/guide-nvme-boot-for-systems-with-legacy-bios-and-uefi-board-duet-refind/32251
@@ -85,19 +88,23 @@ def downloadDUET(source,destination,mbr_regex=None,pbr_regex=None,copy_regex=Non
     if(source.startswith('http')):
         return downloadHTTP(source,destination)
     
-    log.info('getting latest release from '+source)
-    url='https://api.github.com/repos/'+source+'/releases/latest'
+    log.info('searching releases from '+source)
+    url='https://api.github.com/repos/'+source+'/releases'
     log.debug('opening '+url)
     response=urlopen(url)
     response=response.read()
     response=json.loads(response)
-    for asset in response['assets']:
-        log.debug('found '+asset['name'])
-        if(asset['name'].endswith('.zip')):
+    for release in response:
+        url=release['assets_url']
+        log.debug('opening '+url)
+        release=urlopen(url)
+        release=release.read()
+        release=json.loads(release)
+        for asset in release:
             log.info('searching '+asset['name'])
             try:
                 return downloadHTTP(asset['browser_download_url'],destination,mbr_regex,pbr_regex,copy_regex)
-            except FileNotFoundError as e:
+            except Exception as e:
                 log.warning(e)
                 pass
     raise FileNotFoundError('DUET files not found')
@@ -110,7 +117,10 @@ def writembr(source,dest):
     source=os.open(source, os.O_RDONLY | O_BINARY)
 
     buffer=os.read(source, 440)
-    buffer+=os.read(dest, 512)[440:]
+    buffer+=os.read(dest, 512)[440:512]
+    os.lseek(source, 512, os.SEEK_SET)
+    buffer+=os.read(source,7530)
+
     os.lseek(dest, 0, os.SEEK_SET)
     os.write(dest, buffer)
     os.fsync(dest)
@@ -128,7 +138,8 @@ def writepbr(source,dest):
     buffer=os.read(source, 3)
     buffer+=os.read(dest, 512)[3:90]
     os.lseek(source, 90, os.SEEK_SET)
-    buffer+=os.read(source, 422)
+    buffer+=os.read(source, 7952)
+
     os.lseek(dest, 0, os.SEEK_SET)
     os.write(dest, buffer)
     os.fsync(dest)
@@ -164,9 +175,32 @@ def copy(sources,dest,renames=[]):
         except FileNotFoundError:
             log.debug('file not found, skipping rename of '+sourcename)
 
+def getFS(device):
+    import os
+    global DEFAULT_PBR_REGEX
+    global DEFAULT_MBR_REGEX
+    
+    device=os.open(device, os.O_RDONLY | O_BINARY)
+    header=os.read(device,1536)
+
+    if 'FAT32'.encode() in header:
+        return 'FAT32'
+    if 'EXFAT'.encode() in header:
+        log.warning('exFAT filesystem dected - changing default pbr regex')
+        DEFAULT_PBR_REGEX='boot1x(alt)?$'
+        return 'EXFAT'
+    if 'HFS'.encode() in header:
+        log.warning('HFS filesystem dected - changing default pbr regex')
+        DEFAULT_PBR_REGEX='boot1h2?$'
+        return 'HFS'
+    log.warning('unknown filesystem - defalt mbr and pbr regex set for grub4dos')
+    DEFAULT_MBR_REGEX='grldr.mbr'
+    DEFAULT_PBR_REGEX='glrdr.pbr'
+
 def main():
     import argparse
     from sys import stdout
+    import traceback
 
     logging.basicConfig(stream=stdout,level=logging.INFO,format='%(message)s')
 
@@ -252,22 +286,35 @@ def main():
         parser.print_help()
         exit(1)
 
+    if args.pbr_dest:
+        try:
+            log.debug('FS='+getFS(args.pbr_dest))
+        except Exception as e:
+            log.debug('failed to determine filesystem')
+            log.debug(traceback.format_exc())
+
     if args.download_source:
         args.mbr_source,args.pbr_source,args.copy_source=downloadDUET(args.download_source,args.download_dest,args.mbr_source,args.pbr_source)
 
     if args.mbr_dest:
         if not args.mbr_source:
-            log.error('one of --download-source or --mbr-source required with --mbr-dest')
+            if args.download_source:
+                log.error('pbr source not found in archive - exiting')
+            else:
+                log.error('one of --download-source or --mbr-source required with --mbr-dest')
             exit(1)
         writembr(args.mbr_source, args.mbr_dest)
 
     if args.pbr_dest:
         if not args.pbr_source:
-            log.error('one of --download-source or --pbr-source required with --pbr-dest')
+            if args.download_source:
+                log.error('mbr source not found in archive - exiting')
+            else:
+                log.error('one of --download-source or --pbr-source required with --pbr-dest')
             exit(1)
         writepbr(args.pbr_source, args.pbr_dest)
 
-    if args.copy_source and len(args.copy_source) != 0:
+    if args.copy_dest and len(args.copy_source) != 0:
         if not args.rename:
             args.rename=DEFAULT_RENAME
         copy(args.copy_source,args.copy_dest,args.rename)
