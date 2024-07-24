@@ -185,6 +185,7 @@ def getFS(device):
 
     if 'FAT32'.encode() in header:
         return 'FAT32'
+    raise Exception('This tool can only work on FAT32 filesystems')
     if 'EXFAT'.encode() in header:
         log.warning('exFAT filesystem dected - changing default pbr regex')
         DEFAULT_PBR_REGEX='boot1x(alt)?$'
@@ -287,11 +288,7 @@ def main():
         exit(1)
 
     if args.pbr_dest:
-        try:
-            log.debug('FS='+getFS(args.pbr_dest))
-        except Exception as e:
-            log.debug('failed to determine filesystem')
-            log.debug(traceback.format_exc())
+        log.debug('FS='+getFS(args.pbr_dest))
 
     if args.download_source:
         args.mbr_source,args.pbr_source,args.copy_source=downloadDUET(args.download_source,args.download_dest,args.mbr_source,args.pbr_source)
