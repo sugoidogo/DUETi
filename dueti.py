@@ -24,6 +24,8 @@ def downloadHTTP(url,destination,mbr_regex=None,pbr_regex=None,copy_regex=None):
     if not copy_regex:
         copy_regex=DEFAULT_COPY_REGEX
 
+    log.info('opening '+url)
+
     response=urlopen(url)
     dlname=response.headers['content-disposition']
     dlname=dlname.replace('attachment; filename=','')
