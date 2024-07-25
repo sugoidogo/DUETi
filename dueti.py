@@ -2,9 +2,9 @@ import logging
 
 log=logging.getLogger(__name__)
 
-DEFAULT_MBR_REGEX='(boot0(md)?|Mbr.com)$'
+DEFAULT_MBR_REGEX='(boot0(md)?|Mbr.com|grldr.mbr)$'
 DEFAULT_PBR_REGEX='(boot1f32(alt)?|bs32.com)$'
-DEFAULT_COPY_REGEX='(boot(6|7|X64)|Efildr20|glrdr|menu.lst|(?<!32)/EFI/|/Refind/|RefindPlus.REL.efi|Sample.plist)$'
+DEFAULT_COPY_REGEX='(boot(6|7|X64)|Efildr20|grldr|menu.lst|(?<!32)/EFI/|/Refind/|RefindPlus.REL.efi|Sample.plist)$'
 DEFAULT_RENAME=['bootX64:boot','boot7:boot','Sample.plist:efi/oc/Sample.plist','Refind:efi/boot',
 'EFI/Drivers:efi/boot/drivers','efi/boot/refind.efi:efi/boot/bootx64.efi','x64_RefindPlus_REL.efi:efi/boot/bootx64.efi']
 
