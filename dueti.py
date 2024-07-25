@@ -131,6 +131,10 @@ def writembr(source,dest):
     os.close(dest)
 
 def writepbr(source,dest):
+    getFS()
+    writepbr(source,dest)
+
+def writefat32(source,dest):
     import os
 
     log.info('writing '+source+' to '+dest)
@@ -140,7 +144,7 @@ def writepbr(source,dest):
     buffer=os.read(source, 3)
     buffer+=os.read(dest, 512)[3:90]
     os.lseek(source, 90, os.SEEK_SET)
-    buffer+=os.read(source, 7952)
+    buffer+=os.read(source, 422)
 
     os.lseek(dest, 0, os.SEEK_SET)
     os.write(dest, buffer)
@@ -148,6 +152,19 @@ def writepbr(source,dest):
 
     os.close(source)
     os.close(dest)
+
+def writehfs(source,dest):
+    import os
+
+    log.info('writing '+source+' to '+dest)
+    dest=os.open(dest, os.O_RDWR | O_BINARY)
+    source=os.open(source, os.O_RDONLY | O_BINARY)
+
+    os.write(dest,os.read(source,1024))
+
+    os.fsync(dest)
+    os.close(dest)
+    os.close(source)
 
 def copy(sources,dest,renames=[]):
     from shutil import copy2,copytree,rmtree,move
@@ -179,26 +196,29 @@ def copy(sources,dest,renames=[]):
 
 def getFS(device):
     import os
+    global writepbr
     global DEFAULT_PBR_REGEX
     global DEFAULT_MBR_REGEX
+
+    log.debug('checking filesystem on '+device)
     
     device=os.open(device, os.O_RDONLY | O_BINARY)
     header=os.read(device,1536)
 
     if 'FAT32'.encode() in header:
+        log.debug('FAT32 filesystem detected - using default pbr regex and write function')
+        writepbr=writefat32
         return 'FAT32'
-    raise Exception('This tool can only work on FAT32 filesystems')
+    if 'HFS'.encode() in header:
+        log.warning('HFS filesystem dected - changing default pbr regex and write function')
+        writepbr=writehfs
+        DEFAULT_PBR_REGEX='boot1h2?$'
+        return 'HFS'
+    raise Exception('Unknown filesystem. Continuing will destroy your data. Exiting')
     if 'EXFAT'.encode() in header:
         log.warning('exFAT filesystem dected - changing default pbr regex')
         DEFAULT_PBR_REGEX='boot1x(alt)?$'
         return 'EXFAT'
-    if 'HFS'.encode() in header:
-        log.warning('HFS filesystem dected - changing default pbr regex')
-        DEFAULT_PBR_REGEX='boot1h2?$'
-        return 'HFS'
-    log.warning('unknown filesystem - defalt mbr and pbr regex set for grub4dos')
-    DEFAULT_MBR_REGEX='grldr.mbr'
-    DEFAULT_PBR_REGEX='glrdr.pbr'
 
 def main():
     import argparse
