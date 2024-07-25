@@ -74,16 +74,16 @@ def downloadDUET(source,destination,mbr_regex=None,pbr_regex=None,copy_regex=Non
             source='CloverHackyColor/CloverBootloader'
         case 'opencore':
             source='acidanthera/OpenCorePkg'
-        # https://www.insanelymac.com/forum/topic/359685-a-tip-for-anyone-who-wants-to-run-a-uefi-operating-system-on-a-bios-only-commuter/
-        case 'grub4dos':
-            source='chenall/grub4dos'
         case 'refindplus':
             source='dakanji/RefindPlus'
         # https://winraid.level1techs.com/t/guide-nvme-boot-for-systems-with-legacy-bios-and-uefi-board-duet-refind/32251
         case 'edk2015':
-            source='https://drive.usercontent.google.com/download?id=1NtXFq__OYDX4uM-x3lzHDFFhjNO79m7p&export=download&authuser=0'
+            source='https://github.com/sugoidogo/DUETi/releases/download/v0/DUET_EDK2015_REFIND.zip'
         case 'edk2020':
-            source='https://drive.usercontent.google.com/download?id=1ogEdBzKrLRkz0SRwLphpFemRLWmgayA-&export=download&authuser=0'
+            source='https://github.com/sugoidogo/DUETi/releases/download/v0/DUET_EDK2020_REFIND.zip'
+        # https://www.insanelymac.com/forum/topic/359685-a-tip-for-anyone-who-wants-to-run-a-uefi-operating-system-on-a-bios-only-commuter/
+        case 'grub4dos':
+            source='https://github.com/sugoidogo/DUETi/releases/download/v0/grub4dos.zip'
 
     if(source.startswith('http')):
         return downloadHTTP(source,destination)
