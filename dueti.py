@@ -119,9 +119,7 @@ def writembr(source,dest):
     source=os.open(source, os.O_RDONLY | O_BINARY)
 
     buffer=os.read(source, 440)
-    buffer+=os.read(dest, 512)[440:512]
-    os.lseek(source, 512, os.SEEK_SET)
-    buffer+=os.read(source,7530)
+    buffer+=os.read(dest, 512)[440:]
 
     os.lseek(dest, 0, os.SEEK_SET)
     os.write(dest, buffer)
