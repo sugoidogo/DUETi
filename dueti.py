@@ -296,7 +296,7 @@ def main():
     if args.mbr_dest:
         if not args.mbr_source:
             if args.download_source:
-                log.error('pbr source not found in archive - exiting')
+                log.error('mbr source not found in archive - exiting')
             else:
                 log.error('one of --download-source or --mbr-source required with --mbr-dest')
             exit(1)
@@ -305,7 +305,7 @@ def main():
     if args.pbr_dest:
         if not args.pbr_source:
             if args.download_source:
-                log.error('mbr source not found in archive - exiting')
+                log.error('pbr source not found in archive - exiting')
             else:
                 log.error('one of --download-source or --pbr-source required with --pbr-dest')
             exit(1)
