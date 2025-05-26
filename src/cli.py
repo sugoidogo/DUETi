@@ -45,7 +45,8 @@ def main():
         '--download-source',
         help='source to download DUET files from.\
             one of: opencore, clover, edk2015, edk2020,\
-            or a GitHub repo in the format "author/name".'
+            a GitHub repo in the format "author/name",\
+            or an http(s) url to a zip file.'
     )
 
     parser.add_argument(
