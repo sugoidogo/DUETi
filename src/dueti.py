@@ -242,16 +242,16 @@ def getFS(device):
     header=os.read(device,1536)
 
     if 'FAT32'.encode() in header:
-        log.debug('FAT32 filesystem detected - using default pbr regex and write function')
+        log.debug('FAT32 filesystem detected')
         writepbr=writefat32
         return 'FAT32'
     if 'HFS'.encode() in header:
-        log.warning('HFS filesystem dected - changing default pbr regex and write function')
+        log.debug('HFS filesystem dected')
         writepbr=writehfs
         DEFAULT_PBR_REGEX='boot1h2?$'
         return 'HFS'
     if 'EXFAT'.encode() in header:
-        log.warning('exFAT filesystem dected - changing default pbr regex and write function')
+        log.debug('exFAT filesystem dected')
         writepbr=writeexfat
         DEFAULT_PBR_REGEX='boot1x(alt)?$'
         return 'EXFAT'
