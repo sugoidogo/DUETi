@@ -175,30 +175,32 @@ def writeexfat(source,dest):
     source=os.open(source, os.O_RDONLY | O_BINARY)
 
     buffer=os.read(dest,512)
-    buffer=buffer[:120]+os.read(source,512)[120:390]+buffer[390:]
+    buffer=buffer[:120]+os.read(source,512)[120:510]+buffer[510:]
 
-    # https://gist.github.com/twlee79/81f1b8f62246952c2efaaf5935058ce6
     sectorSize=2**buffer[108]
-    buffer+=os.read(dest,(sectorSize*11)-512)
-    checksum=0
-    for index,byte in enumerate(buffer):
-        match index:
-            case 106,107,112:
-                pass
-            case _:
-                checksum = ((checksum << 31) | (checksum >> 1)) + byte
-                checksum &= 0xFFFFFFFF
-    checksum_repeats = math.ceil(sectorSize/4)
-    checksum_packed = (struct.pack("<L",checksum)*checksum_repeats)[:sectorSize]
+    extraSpace=sectorSize-512
+    buffer+=os.read(dest,extraSpace+(sectorSize*10))
+    checksum=exfat_checksum(buffer)
+    while len(buffer) < (sectorSize*12):
+        buffer+=checksum
 
-    os.write(dest,checksum_packed)
-    os.lseek(source,0,os.SEEK_SET)
+    os.lseek(dest,0,os.SEEK_SET)
     os.write(dest,buffer)
     os.fsync(dest)
 
     os.close(dest)
     os.close(source)
 
+# copied from https://github.com/maxpat78/FATtools/blob/400b84c05b346a56c51217be09d38dff7547bf9b/FATtools/exFAT.py#L110
+def exfat_checksum(header):
+    log.debug('calculating exfat checksum')
+    checksum = 0
+    for index in range(len(header)):
+        if index in (106, 107, 112): continue
+        checksum = (((checksum<<31) | (checksum >> 1)) & 0xFFFFFFFF) + header[index]
+        checksum &= 0xFFFFFFFF
+    log.debug("0x{:X}".format(checksum))
+    return checksum.to_bytes(4, 'little')
 
 def copy(sources,dest,renames=[]):
     from shutil import copy2,copytree,rmtree,move
@@ -248,9 +250,9 @@ def getFS(device):
         writepbr=writehfs
         DEFAULT_PBR_REGEX='boot1h2?$'
         return 'HFS'
-    raise Exception('Unknown filesystem. Continuing will destroy your data. Exiting')
     if 'EXFAT'.encode() in header:
         log.warning('exFAT filesystem dected - changing default pbr regex and write function')
         writepbr=writeexfat
         DEFAULT_PBR_REGEX='boot1x(alt)?$'
         return 'EXFAT'
+    raise Exception('Unknown filesystem. Continuing will destroy your data. Exiting')
