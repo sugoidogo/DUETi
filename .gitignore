@@ -1,4 +1,6 @@
-/boot*
-/*.com
-/downloads
-/mount
+boot*
+*.com
+downloads
+mount
+bin
+__pycache__
