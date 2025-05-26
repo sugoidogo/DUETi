@@ -129,7 +129,7 @@ def writembr(source,dest):
     os.close(dest)
 
 def writepbr(source,dest):
-    getFS()
+    getFS(dest)
     writepbr(source,dest)
 
 def writefat32(source,dest):
