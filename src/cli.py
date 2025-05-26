@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # nuitka-project: --onefile
 # nuitka-project: --output-dir=bin/cli
+# nuitka-project: --output-filename=dueti
 # nuitka-project-if: {OS} == "Windows":
 #   nuitka-project: --windows-icon-from-ico=biochip.png
 #   nuitka-project: --windows-uac-admin
