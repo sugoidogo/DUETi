@@ -3,7 +3,7 @@
 # nuitka-project: --output-dir=bin/cli
 # nuitka-project: --output-filename=dueti
 # nuitka-project-if: {OS} == "Windows":
-#   nuitka-project: --windows-icon-from-ico=biochip.png
+#   nuitka-project: --windows-icon-from-ico=biochip.svg
 #   nuitka-project: --windows-uac-admin
 
 from dueti import *
