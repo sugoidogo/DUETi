@@ -98,9 +98,6 @@ def main():
         parser.print_help()
         exit(1)
 
-    if args.pbr_dest:
-        log.debug('FS='+getFS(args.pbr_dest))
-
     if args.download_source:
         args.mbr_source,args.pbr_source,args.copy_source=downloadDUET(args.download_source,args.download_dest,args.mbr_source,args.pbr_source)
 
